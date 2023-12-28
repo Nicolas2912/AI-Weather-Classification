@@ -14,7 +14,7 @@ class WeatherDataset(Dataset):
     def __init__(self, data_folder, transform=None):
         self.data_folder = data_folder
         if transform is None:
-            transform = transforms.Compose([Resize((256, 512)), transforms.ToTensor()])
+            transform = transforms.Compose([Resize((224, 224)), transforms.ToTensor()])
         self.transform = transform
         self.dataset = ImageFolder(self.data_folder, transform=self.transform)
 
@@ -25,6 +25,11 @@ class WeatherDataset(Dataset):
         # Load and preprocess a single sample
         image, label = self.dataset[index]
         return image, label
+
+    def one_image_loader(self):
+        image_loader = DataLoader(self.dataset, batch_size=1)
+        return image_loader
+        # test_image_loader = DataLoader()
 
     def get_data_loaders(self, batch_size=32, train_ratio=0.7, val_ratio=0.15):
         train_length = int(train_ratio * len(self))
@@ -72,6 +77,14 @@ class WeatherDataset(Dataset):
 
 if __name__ == "__main__":
     path_dataset = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset"
-    W = WeatherDataset(data_folder=path_dataset)
-    tr, val, test = W.get_data_loaders(batch_size=1)
+    one_image = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
+    W = WeatherDataset(data_folder=one_image)
+    image_loader = W.one_image_loader()
+    print(image_loader.dataset)
+    print(W.dataset.class_to_idx)
+    # tr, val, test = W.get_data_loaders(batch_size=1)
+    # for i, (image, label) in enumerate(tr):
+    #     print(image.shape)
+    #     print(label)
+    #     break
 
