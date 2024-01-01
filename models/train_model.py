@@ -106,7 +106,7 @@ class WeatherClassifier(nn.Module):
 
         # parameters to adjust
         kernel_size_conv = 3
-        stride_conv = 4
+        stride_conv = 2 # change this parameter
         padding_conv = 1
 
         kernel_size_pool = 2
@@ -122,9 +122,9 @@ class WeatherClassifier(nn.Module):
             nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool)
         )
 
-        length = 6
-        height = 6
-        self.avgpool = nn.AdaptiveAvgPool2d((length, height))
+        length = 14
+        height = 14
+        # self.avgpool = nn.AdaptiveAvgPool2d((length, height))
 
         # classifier layer?
         self.classifier = nn.Sequential(
@@ -137,7 +137,7 @@ class WeatherClassifier(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = self.avgpool(x)
+        # x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.classifier(x)
         # maybe sigmoid for more than 2 weather situations in one image
@@ -156,7 +156,8 @@ class WeatherClassifier(nn.Module):
             self.train()  # set the model to training mode
             train_loss = 0.0
             for inputs, labels in tqdm(train_loader):
-                inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+
+                inputs, labels = inputs.float().to(device), labels.to(device)  # move data to device
 
                 optimizer.zero_grad()
                 outputs = self(inputs)
@@ -353,9 +354,17 @@ if __name__ == "__main__":
     one_image_data = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
     model_path = "trained_model.pth"
 
-    device = torch.device("cpu")
+    # mpd backend
+    device = torch.backends.mps.is_available()
+    if device:
+        device = torch.device("mps")
+        # print("MPS device found.")
+
+
+
+    # device = torch.device("cpu")
     W = WeatherDataset(data_folder=path_dataset)
-    tr, val, test = W.get_data_loaders(batch_size=64)
+    tr, val, test = W.get_data_loaders(batch_size=16)
 
     # model = CustomEfficientNet(num_classes=11).to_fp16().to(device)
     # num_classes_all = len(W.dataset.classes)
@@ -370,16 +379,17 @@ if __name__ == "__main__":
     num_classes_all = len(W.dataset.classes)
     #
     model = WeatherClassifier(num_classes_all)
+    model.to(device)
     # # tune hyperparameters
-    model.optimize_hyperparameters(train_loader=tr, val_loader=val, epochs=10, model_path=model_path, device=device,
-                                   n_trials=10)
+    #model.optimize_hyperparameters(train_loader=tr, val_loader=val, epochs=10, model_path=model_path, device=device,
+    #                               n_trials=10)
     #
-    # print("Start train")
-    # model.train_model(train_loader=tr, val_loader=val, epochs=7, learning_rate=0.00010758019268037226, model_path=model_path,
-    #                    device=device, weight_decay=8.465089413204625e-06)
-    # print("End Train")
+    print("Start train")
+    model.train_model(train_loader=tr, val_loader=val, epochs=10, learning_rate=0.00010758019268037226, model_path=model_path,
+                        device=device, weight_decay=8.465089413204625e-06)
+    print("End Train")
     #
-    # model.test(test, model_path, device)
+    model.test(test, model_path, device)
     # predictions = model.predict_image(one_image_loader=one_img_loader, model_path=model_path)
     # class_to_idx_dict = W.dataset.class_to_idx
     # prediction = model.test(test, model_path, device)
