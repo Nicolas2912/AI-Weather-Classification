@@ -8,6 +8,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from efficientnet_pytorch import EfficientNet
 
+import os
+
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+
+torch.manual_seed(1)
+
 
 class CustomEfficientNet(nn.Module):
     def __init__(self, num_classes):
@@ -105,35 +111,68 @@ class WeatherClassifier(nn.Module):
         super(WeatherClassifier, self).__init__()
 
         # parameters to adjust
-        kernel_size_conv = 3
-        stride_conv = 2 # change this parameter
-        padding_conv = 1
+        input_size = 256
+        filter_size = kernel_size_conv = 3
+        stride = stride_conv = 2  # change this parameter
+        padding = padding_conv = 1
 
-        kernel_size_pool = 2
+        kernel_size_pool = 3
         stride_pool = 2
 
-        # feature layer?
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=kernel_size_conv, stride=stride_conv, padding=padding_conv),
-            nn.SiLU(),
-            nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool),
-            nn.Conv2d(64, 128, kernel_size=kernel_size_conv, stride=stride_conv, padding=padding_conv),
-            nn.SiLU(),
-            nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool)
-        )
+        num_layers = 2
+        channels = [3, 64, 256, 1024]
 
-        length = 14
-        height = 14
-        # self.avgpool = nn.AdaptiveAvgPool2d((length, height))
+        layers = []
+        for i in range(num_layers):
+            layers.append(nn.Conv2d(channels[i], channels[i + 1], kernel_size=kernel_size_conv, stride=stride_conv,
+                                    padding=padding_conv))
+            layers.append(nn.SiLU())
+            layers.append(nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool))
+
+        self.features = nn.Sequential(*layers)
+        self.to(device)
+
+        # feature layer?
+        # self.features = nn.Sequential(
+        #     nn.Conv2d(3, 64, kernel_size=kernel_size_conv, stride=stride_conv, padding=padding_conv),
+        #     nn.SiLU(),
+        #     nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool),
+        #     nn.Conv2d(64, 256, kernel_size=kernel_size_conv, stride=stride_conv, padding=padding_conv),
+        #     nn.SiLU(),
+        #     nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool)
+        # )
+        # self.to(device)
+
+        # Calculate length and height based on input size and convolution/pooling parameters
+        for i in range(num_layers):
+            # Convulution layer
+            output_size_conv = (input_size - filter_size + 2 * padding) / stride + 1
+            input_size = output_size_conv
+            # Pooling layer
+            output_size_pool = (input_size - filter_size) / stride + 1
+            input_size = output_size_pool
+
+        height = length = int(input_size)
+
+        # Pass a dummy input through the features module
+        dummy_input = torch.ones(1, 3, 256, 256).to(device)
+        dummy_output = self.features(dummy_input)
+
+        # Get the output size
+        output_size = dummy_output.shape[-1]  # assuming height = width
+        num_output_channels = dummy_output.shape[1]
+
+        num_features = dummy_output.view(dummy_output.size(0), -1).size(1)
 
         # classifier layer?
         self.classifier = nn.Sequential(
             nn.Dropout(p=0.45),
-            nn.Linear(128 * length * height, 1024),
+            nn.Linear(num_features, 1024),
             nn.SiLU(),
             nn.Dropout(p=0.45),
             nn.Linear(1024, num_classes),
         )
+        self.to(device)
 
     def forward(self, x):
         x = self.features(x)
@@ -145,7 +184,7 @@ class WeatherClassifier(nn.Module):
 
     def train_model(self, train_loader, val_loader, epochs, learning_rate, model_path, device, weight_decay=1e-5):
         criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        optimizer = torch.optim.SGD(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         train_loss_history = []
         val_loss_history = []
         val_acc_history = []
@@ -156,7 +195,6 @@ class WeatherClassifier(nn.Module):
             self.train()  # set the model to training mode
             train_loss = 0.0
             for inputs, labels in tqdm(train_loader):
-
                 inputs, labels = inputs.float().to(device), labels.to(device)  # move data to device
 
                 optimizer.zero_grad()
@@ -214,7 +252,7 @@ class WeatherClassifier(nn.Module):
         # time now
         current_time = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
         plt.savefig(
-            f'/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/experiments/loss_{current_time}.png')
+            r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\experiments\loss_" + current_time + ".png")
         plt.show()
 
     def optimize_hyperparameters(self, train_loader, val_loader, epochs, model_path, device, n_trials=100):
@@ -222,7 +260,7 @@ class WeatherClassifier(nn.Module):
             # Define hyperparameters
             lr = trial.suggest_loguniform('lr', 1e-6, 1e-1)
             weight_decay = trial.suggest_loguniform('weight_decay', 1e-10, 1e-2)
-            # batch_size = trial.suggest_int('batch_size', 1, 128)
+            batch_size = trial.suggest_int('batch_size', 1, 128)
 
             # Initialize model, criterion, optimizer
             criterion = nn.CrossEntropyLoss()
@@ -348,23 +386,169 @@ class WeatherClassifier(nn.Module):
 
         return predictions
 
+    def _print_model_size(self):
+        total_params = 0
+        for name, parameter in model.named_parameters():
+            if not parameter.requires_grad: continue
+            param = parameter.numel()
+            total_params += param
+            print(f'{name} has {param} parameters')
+        print(f'Total parameters: {total_params}')
+    def optimize_hyperparameters_2(self, epochs, data_path, device, n_trials=100):
+        def objective(trial):
+            # Define hyperparameters
+            lr = trial.suggest_loguniform('lr', 1e-6, 1e-1)
+            weight_decay = trial.suggest_loguniform('weight_decay', 1e-10, 1e-2)
+            batch_size = trial.suggest_int('batch_size', 1, 128)
+            num_layers = trial.suggest_int('num_layers', 1, 5)
+            # channels = trial.suggest_categorical('channels', ((3, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)))
+            channels = [3, 64, 512, 1024, 2048, 4096]
+            optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'SGD', 'AdamMax'])
+            activation_name = trial.suggest_categorical('activation', ['ReLU', 'SiLU', 'LeakyReLU'])
+
+            # Set activation function
+            if activation_name == 'ReLU':
+                activation = nn.ReLU()
+            elif activation_name == 'SiLU':
+                activation = nn.SiLU()
+            elif activation_name == 'LeakyReLU':
+                activation = nn.LeakyReLU()
+
+            # Set optimizer
+            if optimizer_name == 'Adam':
+                optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
+            elif optimizer_name == 'SGD':
+                optimizer = torch.optim.SGD(self.parameters(), lr=lr, weight_decay=weight_decay)
+            elif optimizer_name == 'AdamMax':
+                optimizer = torch.optim.AdamW(self.parameters(), lr=lr, weight_decay=weight_decay)
+
+            kernel_size_pool = 3
+            stride_pool = 2
+            input_size = 256
+            filter_size = kernel_size_conv = 3
+            stride = stride_conv = 2  # change this parameter
+            padding = padding_conv = 1
+
+            # Set layers
+            layers = []
+            for i in range(num_layers):
+                layers.append(nn.Conv2d(channels[i], channels[i + 1], kernel_size=kernel_size_conv, stride=stride_conv,
+                                        padding=padding_conv))
+                layers.append(nn.ReLU())
+                layers.append(nn.MaxPool2d(kernel_size=kernel_size_pool, stride=stride_pool, padding=1))
+            self.features = nn.Sequential(*layers)
+            self.to(device)
+
+            for i in range(num_layers):
+                # Convulution layer
+                output_size_conv = (input_size - filter_size + 2 * padding) / stride + 1
+                input_size = output_size_conv
+                output_size_pool = (input_size - filter_size) / stride + 1
+                input_size = output_size_pool
+
+            height = length = int(input_size)
+
+            # Pass a dummy input through the features module
+            dummy_input = torch.ones(1, 3, 256, 256).to(device)
+            dummy_output = self.features(dummy_input)
+
+            # Get the output size
+            output_size = dummy_output.shape[-1]  # assuming height = width
+            num_output_channels = dummy_output.shape[1]
+
+            num_features = dummy_output.numel()
+
+            num_features = dummy_output.view(dummy_output.size(0), -1).size(1)
+
+            # classifier layer?
+            self.classifier = nn.Sequential(
+                nn.Dropout(p=0.45),
+                nn.Linear(num_features, 1024),
+                activation,
+                nn.Dropout(p=0.45),
+                nn.Linear(1024, 11),
+            )
+            self.to(device)
+
+            # Training and validation logic
+            criterion = nn.CrossEntropyLoss()
+            W = WeatherDataset(data_folder=data_path)
+
+            train_loader, val_loader, _ = W.get_data_loaders(batch_size=batch_size)
+
+            for epoch in range(epochs):
+                self.train()  # set the model to training mode
+                train_loss = 0.0
+                for inputs, labels in tqdm(train_loader):
+                    inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+
+                    optimizer.zero_grad()
+                    outputs = self(inputs)
+                    loss = criterion(outputs, labels)
+                    loss.backward()
+                    optimizer.step()
+                    train_loss += loss.item() * inputs.size(0)
+
+                self.eval()  # set the model to evaluation mode
+                correct = 0
+                total = 0
+                with torch.no_grad():
+                    val_loss = 0.0
+                    for inputs, labels in val_loader:
+                        inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                        outputs = self(inputs)
+                        _, predicted = torch.max(outputs.data, 1)
+                        total += labels.size(0)
+                        correct += (predicted == labels).sum().item()
+                        loss = criterion(outputs, labels)
+                        val_loss += loss.item() * inputs.size(0)
+
+                train_loss = train_loss / len(train_loader.dataset)
+                val_loss = val_loss / len(val_loader.dataset)
+                val_accuracy = 100 * correct / total  # calculate validation accuracy
+            print("Val accuracy: " + str(val_accuracy))
+            return val_accuracy
+
+        # Create a study object and optimize the objective function
+        study = optuna.create_study(
+            storage="sqlite:///db.sqlite3",  # Specify the storage URL here.
+            study_name="weather-classification_" + str(datetime.now()),
+            direction='maximize'
+        )
+        study.optimize(objective, n_trials=n_trials)
+
+        # Get the best parameters
+        best_params = study.best_params
+
+        print(f'Best parameters: {best_params}')
+
 
 if __name__ == "__main__":
     path_dataset = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset"
     one_image_data = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
     model_path = "trained_model.pth"
 
+    path_dataset_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset"
+    one_image_data_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\utils\one_image"
+
     # mpd backend
     device = torch.backends.mps.is_available()
     if device:
         device = torch.device("mps")
-        # print("MPS device found.")
-
-
+        print("MPS device found.")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("CUDA device found.")
+    else:
+        device = torch.device("cpu")
+        print("No device found.")
 
     # device = torch.device("cpu")
-    W = WeatherDataset(data_folder=path_dataset)
-    tr, val, test = W.get_data_loaders(batch_size=16)
+    W = WeatherDataset(data_folder=path_dataset_win)
+    # model = WeatherClassifier(num_classes=len(W.dataset.classes)).to(device)
+    # model.optimize_hyperparameters_2(epochs=6, device=device, n_trials=100, data_path=path_dataset_win)
+
+    tr, val, test = W.get_data_loaders(batch_size=68)
 
     # model = CustomEfficientNet(num_classes=11).to_fp16().to(device)
     # num_classes_all = len(W.dataset.classes)
@@ -380,16 +564,16 @@ if __name__ == "__main__":
     #
     model = WeatherClassifier(num_classes_all)
     model.to(device)
-    # # tune hyperparameters
-    #model.optimize_hyperparameters(train_loader=tr, val_loader=val, epochs=10, model_path=model_path, device=device,
-    #                               n_trials=10)
-    #
+    # # # tune hyperparameters
+    # #model.optimize_hyperparameters(train_loader=tr, val_loader=val, epochs=10, model_path=model_path, device=device,
+    # #                               n_trials=10)
+    # #
     print("Start train")
-    model.train_model(train_loader=tr, val_loader=val, epochs=10, learning_rate=0.00010758019268037226, model_path=model_path,
-                        device=device, weight_decay=8.465089413204625e-06)
+    model.train_model(train_loader=tr, val_loader=val, epochs=3, learning_rate=0.0381249444562869, model_path=model_path,
+                         device=device, weight_decay=9.945519164505476e-09)
     print("End Train")
-    #
-    model.test(test, model_path, device)
+    # #
+    # model.test(test, model_path, device)
     # predictions = model.predict_image(one_image_loader=one_img_loader, model_path=model_path)
     # class_to_idx_dict = W.dataset.class_to_idx
     # prediction = model.test(test, model_path, device)
