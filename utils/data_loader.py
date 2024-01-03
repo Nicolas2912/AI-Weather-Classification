@@ -14,7 +14,7 @@ class WeatherDataset(Dataset):
     def __init__(self, data_folder, transform=None):
         self.data_folder = data_folder
         if transform is None:
-            transform = transforms.Compose([Resize((224, 224)), transforms.ToTensor()])
+            transform = transforms.Compose([Resize((256, 256)), transforms.ToTensor()])
         self.transform = transform
         self.dataset = ImageFolder(self.data_folder, transform=self.transform)
 
