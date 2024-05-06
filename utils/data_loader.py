@@ -33,10 +33,11 @@ class WeatherDataset(Dataset):
         get_data_loaders: Splits the dataset into training, validation, and test sets and returns corresponding loaders.
     """
 
-    def __init__(self, data_folder: str, transform=None):
+    def __init__(self, data_folder: str, transform=None, resize_format: tuple = (512, 512)):
         self.data_folder = data_folder
+        self.resize_format = resize_format
         if transform is None:
-            transform = transforms.Compose([Resize((512, 512)), ToTensor()])
+            transform = transforms.Compose([Resize(self.resize_format), ToTensor()])
         self.transform = transform
         self.dataset = ImageFolder(self.data_folder, transform=self.transform)
 
@@ -80,6 +81,19 @@ class WeatherDataset(Dataset):
         test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
         return train_loader, val_loader, test_loader
+
+    def one_image_loader(self, image_path: str):
+        """Loads a single image from the dataset and returns a DataLoader instance.
+
+        Args:
+            image_path (str): Path to the image file.
+
+        Returns:
+            DataLoader: DataLoader instance containing the image.
+        """
+        image = ImageFolder(image_path, transform=self.transform)
+        image_loader = DataLoader(image, batch_size=1, shuffle=False)
+        return image_loader
 
 
 def analyze_class_distribution(loaders: dict, idx_to_class: dict) -> Dict[str, Dict[str, int]]:
@@ -125,7 +139,6 @@ def plot_class_distributions(distribution: Dict[str, Dict[str, int]]):
         sizes = counts.values()
         total = sum(sizes)  # Total count for percentage calculation
 
-        # Plot pie chart
         ax.pie(sizes, labels=labels, autopct=lambda p: '{:.1f}%'.format(p) if p > 0 else '', startangle=90)
         ax.set_title(f'{phase.capitalize()} Set Distribution (Total: {total})')
         ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
@@ -139,6 +152,8 @@ if __name__ == "__main__":
     one_image = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
 
     path_dataset_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset"
+    one_image_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image"
+
     W = WeatherDataset(data_folder=path_dataset_win)
     train_loader, val_loader, test_loader = W.get_data_loaders(batch_size=1, train_ratio=0.7, seed=42)
     print(type(train_loader))
@@ -146,7 +161,7 @@ if __name__ == "__main__":
     print(f"Number of images in the dataset: {len(W)}")
     print(f"Number of images in the training set: {len(train_loader.dataset)}")
     print(f"Number of images in the validation set: {len(val_loader.dataset)}")
-    print(f"Number of images in the test set: {len(test_loader.dataset)}")
+    print(f"Number of images in the test set: {len(test_loader.dataset)}\n")
 
     class_to_idx = W.dataset.class_to_idx
     idx_to_class = {v: k for k, v in class_to_idx.items()}
@@ -159,3 +174,12 @@ if __name__ == "__main__":
 
     distribution = analyze_class_distribution(loaders, idx_to_class)
     plot_class_distributions(distribution)
+
+    # Load a single image from the dataset
+    image_loader = W.one_image_loader(one_image_win)
+    image, _ = next(iter(image_loader))
+    # Display the image and its label
+    plt.imshow(image.squeeze().permute(1, 2, 0))
+    plt.title(f"Custom image")
+    plt.axis('off')
+    plt.show()
