@@ -26,20 +26,24 @@ from utils.data_loader import WeatherDataset
 def arguments():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Weather classification')
-    parser.add_argument('--data_path', type=str,
-                        default=r'C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset',
+    parser.add_argument('--data', type=str,
+                        default='/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/'
+                                '2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset',
                         help='Path to the dataset')
-    parser.add_argument('--device', type=str, default='cuda', help='Device to run the model on')
+    parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on')
     parser.add_argument('--epochs', type=int, default=28, help='Number of epochs to train the model')
-    parser.add_argument('--model_path', type=str, default='trained_model.pth', help='Path to save the trained model')
+    parser.add_argument('--model_path', type=str, default='trained_model.pth',
+                        help='Path to save the trained model')
+    parser.add_argument('--verbose', type=bool, default=True, help='Print model details')
 
     args = parser.parse_args()
-    data_path = args.data_path
-    device = args.device
-    epochs = args.epochs
-    model_path = args.model_path
+    data = args.data
+    compute_device = args.device
+    training_epochs = args.epochs
+    model_file_path = args.model_path
+    verbosity = args.verbose
 
-    return data_path, device, epochs, model_path
+    return data, compute_device, training_epochs, model_file_path, verbosity
 
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
@@ -63,18 +67,21 @@ class WeatherClassifier(nn.Module):
         _print_model_size(): Prints the size of the model in terms of parameters.
     """
 
-    def __init__(self, num_classes: int, device: torch.device, image_size: tuple = (512, 512)):
+    def __init__(self, num_classes: int, compute_device: torch.device, image_size: tuple = (512, 512),
+                 verbosity: bool = True):
         super(WeatherClassifier, self).__init__()
-        self.device = device
+        self.device = compute_device
         self.num_classes = num_classes
         self.image_size = image_size
+        self.verbose = verbosity
 
-        print("=" * 200, "\n")
+        if self.verbose:
+            print("=" * 200)
 
         # Initialize network architecture
         self._initialize_layers()
 
-        # Setup the classifier part of the network
+        # Set up the classifier part of the network
         self._setup_classifier()
 
         logger.info("Model initialized successfully.")
@@ -82,6 +89,14 @@ class WeatherClassifier(nn.Module):
         # Move the model to the specified device
         self.to(device)
         logger.info("Model moved to device.", device=device)
+
+        # Init attributes for training
+        self.criterion = None
+        self.optimizer = None
+        self.train_loss_history = []
+        self.train_acc_history = []
+        self.val_loss_history = []
+        self.val_acc_history = []
 
     def _initialize_layers(self):
         """ Initialize the convolutional layers of the network """
@@ -108,22 +123,23 @@ class WeatherClassifier(nn.Module):
         self.features.to(self.device)
         self._calculate_feature_size()
 
-        logger.info("Convolutional Layers Setup")
-        table = tabulate({
-            'Number of Layers': [self.num_layers],
-            'Channels': [self.channels],
-            'Kernel Size Convolutional': [self.kernel_size_conv],
-            'Stride Convolutional': [self.stride_conv],
-            'Padding Convolutional': [self.padding_conv],
-            'Kernel Size Pooling': [self.kernel_size_pool],
-            'Stride Pooling': [self.stride_pool],
-            'Activation Function': [self.activation_function]
-        }, headers='keys', tablefmt='pretty')
-        print(table)
-        print()
+        if self.verbose:
+            logger.info("Convolutional Layers Setup")
+            table = tabulate({
+                'Number of Layers': [self.num_layers],
+                'Channels': [self.channels],
+                'Kernel Size Convolutional': [self.kernel_size_conv],
+                'Stride Convolutional': [self.stride_conv],
+                'Padding Convolutional': [self.padding_conv],
+                'Kernel Size Pooling': [self.kernel_size_pool],
+                'Stride Pooling': [self.stride_pool],
+                'Activation Function': [self.activation_function]
+            }, headers='keys', tablefmt='pretty')
+            print(table)
+            print()
 
     def _setup_classifier(self):
-        """ Setup the classifier part of the network """
+        """ Set up the classifier part of the network """
         dropout_rate = 0.357273264918355
         self.num_feature = 1024
         self.classifier = nn.Sequential(
@@ -134,13 +150,14 @@ class WeatherClassifier(nn.Module):
             nn.Linear(self.num_feature, self.num_classes)
         )
 
-        logger.info("Classifier Setup")
-        table = tabulate({
-            'Dropout Rate': [dropout_rate],
-            'Number of features': [num_feature]
-        }, headers='keys', tablefmt='pretty')
-        print(table)
-        print()
+        if self.verbose:
+            logger.info("Classifier Setup")
+            table = tabulate({
+                'Dropout Rate': [dropout_rate],
+                'Number of features': [self.num_feature]
+            }, headers='keys', tablefmt='pretty')
+            print(table)
+            print()
 
     def _calculate_feature_size(self):
         """ Calculate the output size of the feature maps to connect to the classifier """
@@ -163,19 +180,18 @@ class WeatherClassifier(nn.Module):
         x = self.classifier(x)
         return x
 
-    def train_model(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int, learning_rate: float,
-                    model_path: str, device: torch.device,
-                    weight_decay: float = 1e-5):
+    def train_model(self, train_loader: DataLoader, val_loader: DataLoader, training_epochs: int, learning_rate: float,
+                    model_file_path: str, compute_device: torch.device, weight_decay: float = 1e-5):
         """
         Trains the model using the provided data loaders and training parameters.
 
         Args:
             train_loader (DataLoader): DataLoader for the training dataset.
             val_loader (DataLoader): DataLoader for the validation dataset.
-            epochs (int): Number of epochs to train the model.
+            training_epochs (int): Number of epochs to train the model.
             learning_rate (float): Learning rate for the optimizer.
-            model_path (str): Path where the trained model will be saved.
-            device (torch.device): Device on which the model should be trained.
+            model_file_path (str): Path where the trained model will be saved.
+            compute_device (torch.device): Device on which the model should be trained.
             weight_decay (float): Weight decay to prevent overfitting during optimization.
 
         Returns:
@@ -187,15 +203,16 @@ class WeatherClassifier(nn.Module):
         criterion_name = self.criterion.__class__.__name__
         optimizer_name = self.optimizer.__class__.__name__
 
-        table = tabulate({
-            'Criterion': [criterion_name],
-            'Optimizer': [optimizer_name],
-            'Learning Rate': [learning_rate],
-            'Weight Decay': [weight_decay]
-        }, headers='keys', tablefmt='pretty')
-        logger.info("Training Parameters")
-        print(table)
-        print()
+        if self.verbose:
+            table = tabulate({
+                'Criterion': [criterion_name],
+                'Optimizer': [optimizer_name],
+                'Learning Rate': [learning_rate],
+                'Weight Decay': [weight_decay]
+            }, headers='keys', tablefmt='pretty')
+            logger.info("Training Parameters")
+            print(table)
+            print()
 
         self.train_loss_history = []
         self.train_acc_history = []
@@ -205,53 +222,59 @@ class WeatherClassifier(nn.Module):
         logger.info("Training Started")
 
         start = time.time()
-        for epoch in range(epochs):
+        for epoch in range(training_epochs):
             self.run_epoch(train_loader, val_loader, device)
 
-            # Print epoch results in tabular format
-            table = tabulate({
-                'Epoch': [epoch],
-                'Train Loss': [self.train_loss_history[-1]],
-                'Val Loss': [self.val_loss_history[-1]],
-                'Train Acc': [self.train_acc_history[-1]],
-                'Val Acc': [self.val_acc_history[-1]]
-            }, headers='keys', tablefmt='pretty')
-            logger.info("Epoch Results")
-            print(table)
+            if self.verbose:
+                # Print epoch results in tabular format
+                table = tabulate({
+                    'Epoch': [epoch],
+                    'Train Loss': [self.train_loss_history[-1]],
+                    'Val Loss': [self.val_loss_history[-1]],
+                    'Train Acc': [self.train_acc_history[-1]],
+                    'Val Acc': [self.val_acc_history[-1]]
+                }, headers='keys', tablefmt='pretty')
+                logger.info("Epoch Results")
+                print(table)
 
         logger.info(f"Training finished in {round(time.time() - start, 3)} seconds.")
 
-        torch.save(self.state_dict(), model_path)
-        logger.info("Model saved successfully.", model_path=model_path)
-        self.plot_results()
+        try:
+            torch.save(self.state_dict(), model_file_path)
+            logger.info("Model saved successfully.", model_path=model_file_path)
+        except Exception as e:
+            logger.error(f"Error saving model: {e}")
 
-    def run_epoch(self, train_loader: DataLoader, val_loader: DataLoader, device: torch.device):
+        if self.verbose:
+            self.plot_results()
+
+    def run_epoch(self, train_loader: DataLoader, val_loader: DataLoader, compute_device: torch.device):
         """
         Executes a training and validation run for one epoch.
 
         Args:
             train_loader (DataLoader): DataLoader for training data.
             val_loader (DataLoader): DataLoader for validation data.
-            device (torch.device): Device to run the training on (e.g., 'cpu' or 'cuda').
+            compute_device (torch.device): Device to run the training on (e.g., 'cpu' or 'cuda').
 
         Returns:
             None
         """
-        train_loss, train_accuracy = self.train_one_epoch(train_loader, device)
-        val_loss, val_accuracy = self.validate_one_epoch(val_loader, device)
+        train_loss, train_accuracy = self.train_one_epoch(train_loader, compute_device)
+        val_loss, val_accuracy = self.validate_one_epoch(val_loader, compute_device)
 
         self.train_loss_history.append(train_loss)
         self.val_loss_history.append(val_loss)
         self.train_acc_history.append(train_accuracy)
         self.val_acc_history.append(val_accuracy)
 
-    def train_one_epoch(self, train_loader: DataLoader, device: torch.device) -> Tuple[float, float]:
+    def train_one_epoch(self, train_loader: DataLoader, compute_device: torch.device) -> Tuple[float, float]:
         """
         Conducts training on the training dataset for one epoch.
 
         Args:
             train_loader (DataLoader): DataLoader for the training data.
-            device (torch.device): Device on which to perform the training operations.
+            compute_device (torch.device): Device on which to perform the training operations.
 
         Returns:
             tuple: Contains average training loss and training accuracy for the epoch.
@@ -270,16 +293,18 @@ class WeatherClassifier(nn.Module):
             train_loss += loss.item() * inputs.size(0)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            correct += (predicted.eq(labels)).sum().item()
+
+        # noinspection PyTypeChecker
         return train_loss / len(train_loader.dataset), 100 * correct / total
 
-    def validate_one_epoch(self, val_loader: DataLoader, device: torch.device) -> Tuple[float, float]:
+    def validate_one_epoch(self, val_loader: DataLoader, compute_device: torch.device) -> Tuple[float, float]:
         """
         Validates the model on the validation dataset for one epoch.
 
         Args:
             val_loader (DataLoader): DataLoader for the validation data.
-            device (torch.device): Device on which to perform the validation operations.
+            compute_device (torch.device): Device on which to perform the validation operations.
 
         Returns:
             tuple: Contains average validation loss and validation accuracy for the epoch.
@@ -290,13 +315,15 @@ class WeatherClassifier(nn.Module):
         total = 0
         with torch.no_grad():
             for inputs, labels in tqdm(val_loader, desc="Validation"):
-                inputs, labels = inputs.to(device), labels.to(device)
+                inputs, labels = inputs.to(compute_device), labels.to(compute_device)
                 outputs = self(inputs)
                 loss = self.criterion(outputs, labels)
                 val_loss += loss.item() * inputs.size(0)
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                correct += (predicted.eq(labels)).sum().item()
+
+        # noinspection PyTypeChecker
         return val_loss / len(val_loader.dataset), 100 * correct / total
 
     def plot_results(self):
@@ -321,8 +348,8 @@ class WeatherClassifier(nn.Module):
         ax2.set_ylabel('Accuracy')
         ax2.legend()
 
-    def optimize_hyperparameters_lr_wd(self, train_loader: DataLoader, val_loader: DataLoader, epochs: int,
-                                       device: torch.device, n_trials: int = 50,
+    def optimize_hyperparameters_lr_wd(self, train_loader: DataLoader, val_loader: DataLoader, training_epochs: int,
+                                       compute_device: torch.device, n_trials: int = 50,
                                        study_name: str = "weather-classification"):
         """
         Optimize hyperparameters for learning rate and weight decay using Optuna.
@@ -330,8 +357,8 @@ class WeatherClassifier(nn.Module):
         Args:
             train_loader (DataLoader): DataLoader for training data.
             val_loader (DataLoader): DataLoader for validation data.
-            epochs (int): Number of epochs to run for each trial.
-            device (torch.device): Device to perform the optimization on.
+            training_epochs (int): Number of epochs to run for each trial.
+            compute_device (torch.device): Device to perform the optimization on.
             n_trials (int): Number of trials to run.
 
         Returns:
@@ -349,11 +376,11 @@ class WeatherClassifier(nn.Module):
             optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
 
             # Training and validation logic
-            for epoch in range(epochs):
+            for epoch in range(training_epochs):
                 self.train()  # set the model to training mode
                 train_loss = 0.0
                 for inputs, labels in tqdm(train_loader):
-                    inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                    inputs, labels = inputs.to(compute_device), labels.to(compute_device)  # move data to device
 
                     optimizer.zero_grad()
                     outputs = self(inputs)
@@ -366,11 +393,12 @@ class WeatherClassifier(nn.Module):
                 with torch.no_grad():
                     val_loss = 0.0
                     for inputs, labels in val_loader:
-                        inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                        inputs, labels = inputs.to(compute_device), labels.to(compute_device)  # move data to device
                         outputs = self(inputs)
                         loss = criterion(outputs, labels)
                         val_loss += loss.item() * inputs.size(0)
 
+            # noinspection PyTypeChecker
             val_loss = val_loss / len(val_loader.dataset)
             return val_loss
 
@@ -387,17 +415,18 @@ class WeatherClassifier(nn.Module):
         best_params_keys = best_params.keys()
         best_params_values = best_params.values()
 
-        table = tabulate({
-            'Best Parameters': best_params_keys,
-            'Values': best_params_values
-        }, headers='keys', tablefmt='pretty')
-        logger.info("Best Parameters")
-        print(table)
-        print()
+        if self.verbose:
+            table = tabulate({
+                'Best Parameters': best_params_keys,
+                'Values': best_params_values
+            }, headers='keys', tablefmt='pretty')
+            logger.info("Best Parameters")
+            print(table)
+            print()
 
         print(f'Best parameters: {best_params}')
 
-    def test(self, test_loader: DataLoader, model_path: str, device: torch.device):
+    def test(self, test_loader: DataLoader, model_file_path: str, compute_device: torch.device):
         """
         Tests the model's performance on a provided test dataset.
 
@@ -409,7 +438,7 @@ class WeatherClassifier(nn.Module):
         Returns:
             None: This method prints the accuracy of the model on the test dataset.
         """
-        self.load_state_dict(torch.load(model_path))
+        self.load_state_dict(torch.load(model_file_path))
         self.eval()
 
         correct = 0
@@ -417,13 +446,15 @@ class WeatherClassifier(nn.Module):
 
         with torch.no_grad():
             for inputs, labels in test_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
+                inputs, labels = inputs.to(compute_device), labels.to(compute_device)
                 outputs = self(inputs)
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                correct += (predicted.eq(labels)).sum().item()
 
         pred_acc = round((100 * correct / total), 3)
+
+        # noinspection PyTypeChecker
         table = tabulate({
             'Number of Test Images': [len(test_loader.dataset)],
             'Accuracy': [f'{pred_acc}%']
@@ -432,13 +463,13 @@ class WeatherClassifier(nn.Module):
         print(table)
         print()
 
-    def predict_image(self, one_image_loader, model_path: str, class_to_idx_mapping: dict):
+    def predict_image(self, one_image_loader, model_file_path: str, class_to_idx_mapping: dict):
         """
         Predicts the class of a single image using the trained model.
 
         Args:
             one_image_loader (DataLoader): DataLoader containing one image.
-            model_path (str): Path to the trained model file.
+            model_file_path (str): Path to the trained model file.
             class_to_idx_mapping (dict): Mapping from class indices to class labels.
 
         Returns:
@@ -465,7 +496,7 @@ class WeatherClassifier(nn.Module):
 
         return predictions
 
-    def optimize_hyperparameters_large(self, data_path, device: torch.device, n_trials=100):
+    def optimize_hyperparameters_large(self, data_path: str, compute_device: torch.device, n_trials: int = 100):
         """
         Optimizes hyperparameters of a neural network using Optuna over a defined number of trials.
 
@@ -475,7 +506,7 @@ class WeatherClassifier(nn.Module):
 
         Args:
             data_path (str): Path to the dataset.
-            device (torch.device): Compute device (CPU or GPU).
+            compute_device (torch.device): Compute device (CPU or GPU).
             n_trials (int, optional): Number of optimization trials. Defaults to 100.
 
         Note:
@@ -489,7 +520,7 @@ class WeatherClassifier(nn.Module):
             batch_size = trial.suggest_int('batch_size', 2, 32)
             activation_name = trial.suggest_categorical('activation', ['ReLU', 'SiLU', 'LeakyReLU'])
             dropout = trial.suggest_uniform('dropout', 0.1, 0.5)
-            epochs = trial.suggest_int('epochs', 5, 50)
+            training_epochs = trial.suggest_int('epochs', 5, 50)
 
             # Set activation function
             activation = None
@@ -523,7 +554,7 @@ class WeatherClassifier(nn.Module):
             # Pass a dummy input through the features module
             dummy_output = None
             try:
-                dummy_input = torch.ones(1, 3, int(input_size), int(input_size)).to(device)
+                dummy_input = torch.ones(1, 3, int(input_size), int(input_size)).to(compute_device)
                 dummy_output = self.features(dummy_input)
             except Exception as e:
                 logger.error(f"Error: {e}")
@@ -538,23 +569,24 @@ class WeatherClassifier(nn.Module):
                 nn.Dropout(p=dropout),
                 nn.Linear(self.num_feature, self.num_classes),
             )
-            self.to(device)
+            self.to(compute_device)
 
             # Training and validation logic
             criterion = nn.CrossEntropyLoss()
-            W = WeatherDataset(data_folder=data_path)
+            weather_model = WeatherDataset(data_folder=data_path)
 
-            train_loader, val_loader, test_loader = W.get_data_loaders(batch_size=batch_size)
+            train_loader, val_loader, test_loader = weather_model.get_data_loaders(batch_size=batch_size)
 
             optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=weight_decay)
 
             # start training loop
-            val_accuracys = {}
-            for epoch in range(epochs):
+            val_accuracies = {}
+            test_accuracy = 0
+            for epoch in range(training_epochs):
                 self.train()  # set the model to training mode
                 train_loss = 0.0
                 for inputs, labels in tqdm(train_loader):
-                    inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                    inputs, labels = inputs.to(compute_device), labels.to(compute_device)  # move data to device
 
                     optimizer.zero_grad()
                     outputs = self(inputs)
@@ -572,29 +604,30 @@ class WeatherClassifier(nn.Module):
                     val_loss = 0.0
                     test_loss = 0.0
                     for inputs, labels in val_loader:
-                        inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                        inputs, labels = inputs.to(compute_device), labels.to(compute_device)  # move data to device
                         outputs = self(inputs)
-                        _, predicted = torch.max(outputs.data, 1)
+                        _, predicted = torch.max(outputs.data, 1)  # get the predicted class
                         total_val += labels.size(0)
-                        correct_val += (predicted == labels).sum().item()
+                        correct_val += (predicted.eq(labels)).sum().item()
                         loss = criterion(outputs, labels)
                         val_loss += loss.item() * inputs.size(0)
                     for inputs, labels in test_loader:
-                        inputs, labels = inputs.to(device), labels.to(device)  # move data to device
+                        inputs, labels = inputs.to(compute_device), labels.to(compute_device)  # move data to device
                         outputs = self(inputs)
-                        _, predicted = torch.max(outputs.data, 1)
+                        _, predicted = torch.max(outputs.data, 1)  # get the predicted class
                         total_test += labels.size(0)
-                        correct_test += (predicted == labels).sum().item()
+                        correct_test += (predicted.eq(labels)).sum().item()
                         loss = criterion(outputs, labels)
                         test_loss += loss.item() * inputs.size(0)
 
                 val_accuracy = 100 * correct_val / total_val  # calculate validation accuracy
-                val_accuracys[epoch] = val_accuracy  # store validation accuracy
+                val_accuracies[epoch] = val_accuracy  # store validation accuracy
                 test_accuracy = 100 * correct_test / total_test  # calculate validation accuracy
 
             # log accuracies
-            logger.info(f"Validation accuracies: {val_accuracys}")
-            logger.info(f"Test accuracy: {test_accuracy}")
+            if self.verbose:
+                logger.info(f"Validation accuracies: {val_accuracies}")
+                logger.info(f"Test accuracy: {test_accuracy}")
 
             return test_accuracy
 
@@ -611,13 +644,14 @@ class WeatherClassifier(nn.Module):
         best_params_keys = best_params.keys()
         best_params_values = best_params.values()
 
-        table = tabulate({
-            'Best Parameters': best_params_keys,
-            'Values': best_params_values
-        }, headers='keys', tablefmt='pretty')
-        logger.info("Best Parameters")
-        print(table)
-        print()
+        if self.verbose:
+            table = tabulate({
+                'Best Parameters': best_params_keys,
+                'Values': best_params_values
+            }, headers='keys', tablefmt='pretty')
+            logger.info("Best Parameters")
+            print(table)
+            print()
 
 
 if __name__ == "__main__":
@@ -629,25 +663,28 @@ if __name__ == "__main__":
     # one_image_data_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image"
 
     # Get arguments
-    path_dataset, device, epochs, model_path = arguments()
+    path_dataset, device, epochs, model_path, verbose = arguments()
 
     logger.info("Parameters:")
     print(f"Path to dataset: {path_dataset}")
     print(f"Device: {device}")
     print(f"Epochs: {epochs}")
     print(f"Model path: {model_path}")
+    print(f"Verbose: {verbose}")
     print()
 
     device = torch.device(device)
     W = WeatherDataset(data_folder=path_dataset, resize_format=(512, 512))
-    model = WeatherClassifier(num_classes=len(W.dataset.classes), device=device, image_size=W.resize_format)
+    model = WeatherClassifier(num_classes=len(W.dataset.classes), compute_device=device, image_size=W.resize_format,
+                              verbosity=verbose)
 
     # Get data loaders
     tr, val, test = W.get_data_loaders(batch_size=5)
 
     # Train model
     logger.info("START TRAINING WEATHER CLASSIFIER MODEL")
-    model.train_model(tr, val, epochs, 2.1788228027184658e-05, model_path, device, 1.592566270355879e-06)
+    model.train_model(train_loader=tr, val_loader=val, training_epochs=epochs, learning_rate=2.1788228027184658e-05,
+                      model_file_path=model_path, compute_device=device, weight_decay=1.592566270355879e-06)
 
     # Test model
     model.test(test, model_path, device)
