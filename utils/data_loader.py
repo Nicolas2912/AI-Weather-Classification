@@ -1,21 +1,17 @@
 import os
 import random
-
-import torch
-
-import torchvision.transforms as transforms
-
-from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import Resize, ToTensor
-from torchvision.datasets import ImageFolder
-from torch.utils.data import random_split
-
-import matplotlib.pyplot as plt
-import numpy as np
-
-from tqdm import tqdm
 from collections import defaultdict
 from typing import Tuple, Dict
+
+import torch
+from torch.utils.data import DataLoader, Dataset, random_split
+import torchvision.transforms as transforms
+from torchvision.datasets import ImageFolder
+import matplotlib.pyplot as plt
+import numpy as np
+from tqdm import tqdm
+
+from torchvision.transforms import Resize, ToTensor
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -40,16 +36,18 @@ class WeatherDataset(Dataset):
             transform = transforms.Compose([Resize(self.resize_format), ToTensor()])
         self.transform = transform
         self.dataset = ImageFolder(self.data_folder, transform=self.transform)
+        # Calculate all classes
+        self.classes = self.dataset.classes
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, index):
-        image, label = self.dataset[index]
-        return image, label
+        img, label = self.dataset[index]
+        return img, label
 
-    def get_data_loaders(self, batch_size=32, train_ratio=0.7, val_ratio=0.15, seed=42) -> Tuple[
-        DataLoader, DataLoader, DataLoader]:
+    def get_data_loaders(self, batch_size=32, train_ratio=0.7, val_ratio=0.15, seed=42) -> \
+            Tuple[DataLoader, DataLoader, DataLoader]:
         """Creates and returns data loaders for the dataset after splitting into train, validation, and test sets.
 
         Args:
@@ -76,11 +74,11 @@ class WeatherDataset(Dataset):
             generator=torch.Generator().manual_seed(seed)
         )
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+        train_data_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_data_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+        test_data_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-        return train_loader, val_loader, test_loader
+        return train_data_loader, val_data_loader, test_data_loader
 
     def one_image_loader(self, image_path: str):
         """Loads a single image from the dataset and returns a DataLoader instance.
@@ -91,35 +89,35 @@ class WeatherDataset(Dataset):
         Returns:
             DataLoader: DataLoader instance containing the image.
         """
-        image = ImageFolder(image_path, transform=self.transform)
-        image_loader = DataLoader(image, batch_size=1, shuffle=False)
-        return image_loader
+        img = ImageFolder(image_path, transform=self.transform)
+        img_loader = DataLoader(img, batch_size=1, shuffle=False)
+        return img_loader
 
 
-def analyze_class_distribution(loaders: dict, idx_to_class: dict) -> Dict[str, Dict[str, int]]:
+def analyze_class_distribution(data_loaders: dict, index_to_class: dict) -> Dict[str, Dict[str, int]]:
     """
     Analyzes the class distribution across training, validation, and test datasets.
 
     Args:
-    - loaders (dict): Dictionary of DataLoaders.
-    - idx_to_class (dict): Dictionary mapping label indices to class names.
+    - data_loaders (dict): Dictionary of DataLoaders.
+    - index_to_class (dict): Dictionary mapping label indices to class names.
 
     Returns:
     - distribution (dict): Dictionary containing class distributions for train, val, and test sets.
     """
-    distribution = {'train': defaultdict(int), 'val': defaultdict(int), 'test': defaultdict(int)}
+    class_distribution = {'train': defaultdict(int), 'val': defaultdict(int), 'test': defaultdict(int)}
 
     for phase in ['train', 'val', 'test']:
-        loader = loaders[phase]
+        loader = data_loaders[phase]
         for images, labels in tqdm(loader, desc=f"Analyzing {phase} distribution"):
             for label in labels:
-                class_name = idx_to_class[label.item()]
-                distribution[phase][class_name] += 1
+                class_name = index_to_class[label.item()]
+                class_distribution[phase][class_name] += 1
 
-    return distribution
+    return class_distribution
 
 
-def plot_class_distributions(distribution: Dict[str, Dict[str, int]]):
+def plot_class_distributions(class_distribution: Dict[str, Dict[str, int]]):
     """
     Plots pie charts of class distributions for training, validation, and test sets.
 
@@ -127,13 +125,13 @@ def plot_class_distributions(distribution: Dict[str, Dict[str, int]]):
     - distribution (dict): Dictionary containing class distributions for train, val, and test sets.
     """
     # Define the number of subplots based on the distribution keys
-    n = len(distribution)
-    fig, axs = plt.subplots(1, n, figsize=(n * 5, 6))  # Adjust figsize as needed
+    n = len(class_distribution)
+    fig, axs = plt.subplots(1, n, figsize=(n * 5, 6))  # Adjust fig-size as needed
 
     if n == 1:  # If only one phase is provided, wrap axs in a list
         axs = [axs]
 
-    for ax, (phase, counts) in zip(axs, distribution.items()):
+    for ax, (phase, counts) in zip(axs, class_distribution.items()):
         # Prepare data for the pie chart
         labels = counts.keys()
         sizes = counts.values()
@@ -148,15 +146,18 @@ def plot_class_distributions(distribution: Dict[str, Dict[str, int]]):
 
 
 if __name__ == "__main__":
-    path_dataset = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset"
-    one_image = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
+    path_dataset = ("/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester"
+                    "/SimulationOptischerSysteme/AI-Weather-Classification/dataset")
+    one_image = ("/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester"
+                 "/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image")
 
-    path_dataset_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset"
-    one_image_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image"
+    path_dataset_win = (r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation"
+                        r"\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset")
+    one_image_win = (r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation"
+                     r"\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image")
 
-    W = WeatherDataset(data_folder=path_dataset_win)
+    W = WeatherDataset(data_folder=path_dataset)
     train_loader, val_loader, test_loader = W.get_data_loaders(batch_size=1, train_ratio=0.7, seed=42)
-    print(type(train_loader))
 
     print(f"Number of images in the dataset: {len(W)}")
     print(f"Number of images in the training set: {len(train_loader.dataset)}")
