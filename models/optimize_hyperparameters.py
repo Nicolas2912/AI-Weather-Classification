@@ -1,8 +1,5 @@
 import os
-import sys
 from datetime import datetime
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import structlog
 import argparse
@@ -31,9 +28,9 @@ logger = structlog.get_logger()
 
 def arguments():
     parser_opt = argparse.ArgumentParser(description='Optimize hyperparameters for the weather classification model.')
-    parser_opt.add_argument('--data_folder', type=str,
+    parser_opt.add_argument('--data', type=str,
                             default=r'C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset',
-                            help='Path tothedatasetfolder.')
+                            help='Path to the dataset folder.')
 
     parser_opt.add_argument('--n_trials', type=int, default=50, help='Number of optimization trials.')
     parser_opt.add_argument('--epochs', type=int, default=10, help='Number of epochs for training.')
@@ -46,20 +43,20 @@ def arguments():
 
     args_opt = parser_opt.parse_args()
 
-    data_folder = args_opt.data_folder
+    data = args_opt.data
     n_trials = args_opt.n_trials
     epochs = args_opt.epochs
     device = args_opt.device
     mode = args_opt.mode
     study_name = args_opt.study_name
 
-    return data_folder, n_trials, epochs, device, mode, study_name
+    return data, n_trials, epochs, device, mode, study_name
 
 
 if __name__ == "__main__":
-    data_folder, n_trials, epochs, device, mode, study_name = arguments()
+    data, n_trials, epochs, device, mode, study_name = arguments()
     logger.info("PARAMETERS:")
-    print(f"Data folder: {data_folder}")
+    print(f"Data path: {data}")
     print(f"Number of trials: {n_trials}")
     print(f"Number of epochs: {epochs}")
     print(f"Device: {device}")
@@ -67,17 +64,22 @@ if __name__ == "__main__":
     print(f"Study name: {study_name}")
     print()
 
-    W = WeatherDataset(data_folder=data_folder)
+    W = WeatherDataset(data_folder=data)
     device = torch.device(device)
 
+    # Get data
     tr, val, te = W.get_data_loaders()
 
+    # Get model
     model = WeatherClassifier(device=device, num_classes=len(W.dataset.classes))
 
     logger.info("START OPTIMIZING HYPERPARAMETERS")
 
+    # Optimize hyperparameters
     if mode == "small":
         model.optimize_hyperparameters_lr_wd(tr, val, epochs, device, n_trials, study_name)
 
     elif mode == "large":
-        model.optimize_hyperparameters_large(data_folder, device, n_trials)
+        model.optimize_hyperparameters_large(data, device, n_trials)
+
+    print("=======FINISHED=======")
