@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 from collections import defaultdict
 from typing import Tuple, Dict
@@ -15,6 +16,10 @@ from torchvision.transforms import Resize, ToTensor
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Add the project root to the sys.path
+sys.path.insert(0, PROJECT_ROOT)
 
 class WeatherDataset(Dataset):
     """A dataset class for loading weather images with transformations.
@@ -80,7 +85,7 @@ class WeatherDataset(Dataset):
 
         return train_data_loader, val_data_loader, test_data_loader
 
-    def one_image_loader(self, image_path: str):
+    def custom_image_loader(self, image_path: str):
         """Loads a single image from the dataset and returns a DataLoader instance.
 
         Args:
@@ -89,9 +94,9 @@ class WeatherDataset(Dataset):
         Returns:
             DataLoader: DataLoader instance containing the image.
         """
-        img = ImageFolder(image_path, transform=self.transform)
-        img_loader = DataLoader(img, batch_size=1, shuffle=False)
-        return img_loader
+        imgs = ImageFolder(image_path, transform=self.transform)
+        imgs_loader = DataLoader(imgs, batch_size=1, shuffle=False)
+        return imgs_loader
 
 
 def analyze_class_distribution(data_loaders: dict, index_to_class: dict) -> Dict[str, Dict[str, int]]:
@@ -156,7 +161,7 @@ if __name__ == "__main__":
     one_image_win = (r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation"
                      r"\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image")
 
-    W = WeatherDataset(data_folder=path_dataset)
+    W = WeatherDataset(data_folder=path_dataset_win)
     train_loader, val_loader, test_loader = W.get_data_loaders(batch_size=1, train_ratio=0.7, seed=42)
 
     print(f"Number of images in the dataset: {len(W)}")
@@ -173,11 +178,11 @@ if __name__ == "__main__":
         'test': test_loader
     }
 
-    distribution = analyze_class_distribution(loaders, idx_to_class)
-    plot_class_distributions(distribution)
+    # distribution = analyze_class_distribution(loaders, idx_to_class)
+    # plot_class_distributions(distribution)
 
     # Load a single image from the dataset
-    image_loader = W.one_image_loader(one_image_win)
+    image_loader = W.custom_image_loader(one_image_win)
     image, _ = next(iter(image_loader))
     # Display the image and its label
     plt.imshow(image.squeeze().permute(1, 2, 0))
