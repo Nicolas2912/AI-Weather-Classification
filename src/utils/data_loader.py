@@ -16,10 +16,11 @@ from torchvision.transforms import Resize, ToTensor
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
+
 
 class WeatherDataset(Dataset):
     """A dataset class for loading weather images with transformations.
