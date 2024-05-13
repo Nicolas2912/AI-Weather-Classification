@@ -1,10 +1,16 @@
 import os
+import sys
 from datetime import datetime
 
 import structlog
 import argparse
 
 import torch
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Add the project root to the sys.path
+sys.path.insert(0, PROJECT_ROOT)
 
 from utils.data_loader import WeatherDataset
 from train.train_model import WeatherClassifier
@@ -34,7 +40,7 @@ def arguments():
 
     parser_opt.add_argument('--n_trials', type=int, default=50, help='Number of optimization trials.')
     parser_opt.add_argument('--epochs', type=int, default=10, help='Number of epochs for training.')
-    parser_opt.add_argument('--device', type=str, default='cuda', help='Device to use for training.')
+    parser_opt.add_argument('--device', type=str, default='cuda', help='Device to use for training.', choices=["cpu", "cuda", "mps"])
     parser_opt.add_argument('--mode', type=str, default='small', choices=["small", "large"],
                             help='Mode for optimization: small or large.')
     parser_opt.add_argument('--study_name', type=str,
@@ -71,7 +77,7 @@ if __name__ == "__main__":
     tr, val, te = W.get_data_loaders()
 
     # Get model
-    model = WeatherClassifier(device=device, num_classes=len(W.dataset.classes))
+    model = WeatherClassifier(compute_device=device, num_classes=len(W.dataset.classes))
 
     logger.info("START OPTIMIZING HYPERPARAMETERS")
 
