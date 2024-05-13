@@ -15,7 +15,7 @@ from tqdm import tqdm
 from tabulate import tabulate
 from typing import Tuple
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
@@ -233,12 +233,12 @@ class WeatherClassifier(nn.Module):
 
         start = time.time()
         for epoch in range(training_epochs):
-            self.run_epoch(train_loader, val_loader, device)
+            self.run_epoch(train_loader, val_loader, compute_device)
 
             if self.verbose:
                 # Print epoch results in tabular format
                 table = tabulate({
-                    'Epoch': [epoch],
+                    'Epoch': [epoch + 1],
                     'Train Loss': [self.train_loss_history[-1]],
                     'Val Loss': [self.val_loss_history[-1]],
                     'Train Acc': [self.train_acc_history[-1]],
