@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from datetime import datetime
 
@@ -12,7 +13,12 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tabulate import tabulate
-from typing import Tuple, Any
+from typing import Tuple
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Add the project root to the sys.path
+sys.path.insert(0, PROJECT_ROOT)
 
 from utils.data_loader import WeatherDataset
 
@@ -27,17 +33,21 @@ def arguments():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Weather classification')
     parser.add_argument('--data', type=str,
-                        default='/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/'
-                                '2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset',
+                        default=r'C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset',
                         help='Path to the dataset')
-    parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on')
+    parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on',
+                        choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--epochs', type=int, default=28, help='Number of epochs to train the model')
     parser.add_argument('--model_path', type=str, default='trained_model.pth',
                         help='Path to save the trained model')
-    parser.add_argument('--verbose', type=bool, default=True, help='Print model details')
+    parser.add_argument('--verbose', type=bool, default=True, help='Print model details', choices=[True, False])
 
     args = parser.parse_args()
     data = args.data
+
+    # make data path to raw string
+    data = r"{}".format(data)
+
     compute_device = args.device
     training_epochs = args.epochs
     model_file_path = args.model_path
@@ -87,8 +97,8 @@ class WeatherClassifier(nn.Module):
         logger.info("Model initialized successfully.")
 
         # Move the model to the specified device
-        self.to(device)
-        logger.info("Model moved to device.", device=device)
+        self.to(self.device)
+        logger.info("Model moved to device.", device=self.device)
 
         # Init attributes for training
         self.criterion = None
@@ -462,39 +472,6 @@ class WeatherClassifier(nn.Module):
         logger.info("Test Results")
         print(table)
         print()
-
-    def predict_image(self, one_image_loader, model_file_path: str, class_to_idx_mapping: dict):
-        """
-        Predicts the class of a single image using the trained model.
-
-        Args:
-            one_image_loader (DataLoader): DataLoader containing one image.
-            model_file_path (str): Path to the trained model file.
-            class_to_idx_mapping (dict): Mapping from class indices to class labels.
-
-        Returns:
-            list: Predictions for the image.
-        """
-        self.load_state_dict(torch.load(model_path))
-        self.eval()
-        predictions = []
-        idx_to_class_mapping = {value: key for key, value in class_to_idx_mapping.items()}
-        image_names = []
-        for l in one_image_loader.dataset.imgs:
-            image_names.append(l[0].split("\\")[-1])
-
-        with torch.no_grad():
-            for inputs, labels in one_image_loader:
-                outputs = self(inputs)
-                _, predicted = torch.max(outputs.data, 1)
-                predictions.append(predicted)
-
-        predictions = [idx_to_class_mapping[i.item()] for i in predictions]
-
-        for real, pred in zip(image_names, predictions):
-            print(f"Image: {real}, Prediction: {pred}")
-
-        return predictions
 
     def optimize_hyperparameters_large(self, data_path: str, compute_device: torch.device, n_trials: int = 100):
         """
