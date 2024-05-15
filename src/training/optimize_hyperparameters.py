@@ -14,6 +14,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 from src.utils.data_loader import WeatherDataset
 from src.training.train_model import WeatherClassifier
+from src.training.train_model import DEFAULT_DATASET_PATH
 
 # TO RUN IN CONSOLE:
 # 1. (WINDOWS): set PYTHONPATH=<path_to_project_root>
@@ -35,7 +36,7 @@ logger = structlog.get_logger()
 def arguments():
     parser_opt = argparse.ArgumentParser(description='Optimize hyperparameters for the weather classification model.')
     parser_opt.add_argument('--data', type=str,
-                            default=r'C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset',
+                            default=DEFAULT_DATASET_PATH,
                             help='Path to the dataset folder.')
 
     parser_opt.add_argument('--n_trials', type=int, default=50, help='Number of optimization trials.')
@@ -49,14 +50,7 @@ def arguments():
 
     args_opt = parser_opt.parse_args()
 
-    data = args_opt.data
-    n_trials = args_opt.n_trials
-    epochs = args_opt.epochs
-    device = args_opt.device
-    mode = args_opt.mode
-    study_name = args_opt.study_name
-
-    return data, n_trials, epochs, device, mode, study_name
+    return args_opt.data, args_opt.n_trials, args_opt.epochs, args_opt.device, args_opt.mode, args_opt.study_name
 
 
 if __name__ == "__main__":
