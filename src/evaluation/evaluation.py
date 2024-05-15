@@ -1,5 +1,7 @@
+import os
 import argparse
 from typing import List, Tuple
+from datetime import datetime
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,11 +11,18 @@ from sklearn.metrics import classification_report, f1_score, confusion_matrix
 from tabulate import tabulate
 from tqdm import tqdm
 
-from src.training.train_model import WeatherClassifier
+from src.training.train_model import WeatherClassifier, DEFAULT_DATASET_PATH, MODEL_NAME, PROJECT_ROOT
 from src.utils.data_loader import WeatherDataset
 import structlog
 
 logger = structlog.get_logger()
+
+
+# check if os is windows. If yes, add "\" to the end of PROJECT_ROOT
+if os.name == 'nt':
+    MODEL_PATH = PROJECT_ROOT + "\\" + MODEL_NAME
+else:
+    MODEL_PATH = PROJECT_ROOT + "/" + MODEL_NAME
 
 
 def arguments():
@@ -28,24 +37,14 @@ def arguments():
     """
     parser = argparse.ArgumentParser(description='Evaluate the weather classification model.')
 
-    parser.add_argument('--data', type=str,
-                        default="/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. "
-                                "Semester/SimulationOptischerSysteme/AI-Weather-Classification/dataset",
+    parser.add_argument('--data', type=str, default=DEFAULT_DATASET_PATH,
                         help="Path to the dataset folder.")
-    parser.add_argument('--model',
-                        default="/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. "
-                                "Semester/SimulationOptischerSysteme/AI-Weather-Classification/models/"
-                                "trained_model_new.pth",
-                        type=str, help="Path to the model file.")
+    parser.add_argument('--model', default=MODEL_PATH, type=str, help="Path to the model file.")
     parser.add_argument('--device', type=str, default='cpu', help="Device to use for training.")
 
     args = parser.parse_args()
 
-    dataset_path = args.data
-    model_path = args.model
-    device_type = args.device
-
-    return dataset_path, model_path, device_type
+    return args.data, args.model, args.device
 
 
 def _plot_confusion_matrix(matrix: np.ndarray, class_names: List[str]):
@@ -74,6 +73,11 @@ def _plot_confusion_matrix(matrix: np.ndarray, class_names: List[str]):
         for j in range(len(class_names)):
             ax.text(j, i, int(matrix[i, j]), ha="center", va="center", color="black", fontsize=15)
     plt.show()
+
+    # save the plot
+    date = datetime.now().strftime("%Y%m%d_%H%M%S")
+    plot_path = os.path.join(PROJECT_ROOT, 'experiments', f'confusion_matrix_{MODEL_NAME}_{date}.png')
+    fig.savefig(plot_path)
 
 
 def eval_model(classifier_model: WeatherClassifier, test_data: DataLoader, class_names: List[str]) -> Tuple[float, str]:
