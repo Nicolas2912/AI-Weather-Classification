@@ -14,11 +14,14 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
 
-from train.train_model import WeatherClassifier
-from utils.data_loader import WeatherDataset
+from src.training.train_model import WeatherClassifier, DEFAULT_DATASET_PATH
+from src.utils.data_loader import WeatherDataset
+from src.evaluation.evaluation import MODEL_PATH
+
+DEFAULT_IMAGE_PATH = os.path.join(PROJECT_ROOT, "test_image")
 
 
-def arguemnts() -> Tuple[str, str, str, str]:
+def arguments() -> Tuple[str, str, str, str]:
     """
     Parses command-line arguments for the weather classification prediction script.
 
@@ -31,15 +34,9 @@ def arguemnts() -> Tuple[str, str, str, str]:
     """
     parser = argparse.ArgumentParser(description='Predict weather class for own images.')
 
-    parser.add_argument('--model', type=str,
-                        default=r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\train\trained_model_new.pth",
-                        help='Path to the trained model.')
-    parser.add_argument('--images', type=str,
-                        default=r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image2",
-                        help='Path to the images to predict.')
-    parser.add_argument('--dataset', type=str,
-                        default=r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset",
-                        help='Path to the dataset.')
+    parser.add_argument('--model', type=str, default=MODEL_PATH, help='Path to the trained model.')
+    parser.add_argument('--images', type=str, default=DEFAULT_IMAGE_PATH, help='Path to the images to predict.')
+    parser.add_argument('--dataset', type=str, default=DEFAULT_DATASET_PATH, help='Path to the dataset.')
     parser.add_argument('--device', type=str, default='cpu', help='Device to use for prediction.',
                         choices=["cpu", "cuda", "mps"])
 
@@ -91,11 +88,13 @@ def predict(model_path: str, images_path: str, dataset_path: str, compute_device
 
     print("\n=======FINISHED=======")
 
+    # TODO: Maybe add matpotlib code to show the images and their predictions
+
     return predictions
 
 
 if __name__ == "__main__":
-    model_path, images_path, dataset_path, device = arguemnts()
+    model_path, images_path, dataset_path, device = arguments()
 
     logger.info("Parameters:")
     print(f"Model path: {model_path}")
