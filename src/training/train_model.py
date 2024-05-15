@@ -17,10 +17,15 @@ from typing import Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+MODEL_NAME = "weather-model.pth"
+
+# Construct the default dataset path relative to the project root
+DEFAULT_DATASET_PATH = os.path.join(PROJECT_ROOT, 'dataset')
+
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.utils.data_loader import WeatherDataset
+from src.utils.data_loader import WeatherDataset # Important to import WeatherDataset in this position
 
 
 # TODO: Add this information to README.md
@@ -32,28 +37,26 @@ from src.utils.data_loader import WeatherDataset
 def arguments():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Weather classification')
-    parser.add_argument('--data', type=str,
-                        default=r'C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset',
-                        help='Path to the dataset')
+
+    # Default model path
+    global MODEL_NAME
+    default_model_path = os.path.join(PROJECT_ROOT, 'models', f'{MODEL_NAME}.pth')
+
+    parser.add_argument('--data', type=str, default=DEFAULT_DATASET_PATH, help='Path to the dataset')
     parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on',
                         choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--epochs', type=int, default=28, help='Number of epochs to train the model')
-    parser.add_argument('--model_path', type=str, default='trained_model.pth',
+    parser.add_argument('--model_path', type=str, default=default_model_path,
                         help='Path to save the trained model')
-    parser.add_argument('--verbose', type=bool, default=True, help='Print model details', choices=[True, False])
+    parser.add_argument('--verbose', type=bool, default=True, help='Print model details',
+                        choices=[True, False])
 
     args = parser.parse_args()
-    data = args.data
 
-    # make data path to raw string
-    data = r"{}".format(data)
+    if args.model_path != MODEL_NAME:
+        MODEL_NAME = args.model_path
 
-    compute_device = args.device
-    training_epochs = args.epochs
-    model_file_path = args.model_path
-    verbosity = args.verbose
-
-    return data, compute_device, training_epochs, model_file_path, verbosity
+    return args.data, args.device, args.epochs, args.model_path, args.verbose
 
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
@@ -358,6 +361,11 @@ class WeatherClassifier(nn.Module):
         ax2.set_ylabel('Accuracy')
         ax2.legend()
 
+        # save the plot to folder
+        date = datetime.now().strftime("%Y%m%d_%H%M%S")
+        plot_path = os.path.join(PROJECT_ROOT, 'experiments', f'training_results_{MODEL_NAME}_{date}.png')
+        fig.savefig(plot_path)
+
     def optimize_hyperparameters_lr_wd(self, train_loader: DataLoader, val_loader: DataLoader, training_epochs: int,
                                        compute_device: torch.device, n_trials: int = 50,
                                        study_name: str = "weather-classification"):
@@ -370,6 +378,7 @@ class WeatherClassifier(nn.Module):
             training_epochs (int): Number of epochs to run for each trial.
             compute_device (torch.device): Device to perform the optimization on.
             n_trials (int): Number of trials to run.
+            study_name (str): Name of the Optuna study.
 
         Returns:
             None: Outputs the best hyperparameters to the console.
@@ -636,7 +645,7 @@ if __name__ == "__main__":
     one_image_data = "/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image"
     # model_path = "trained_model.pth"
 
-    path_dataset_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset"
+    # path_dataset_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset"
     # one_image_data_win = r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image"
 
     # Get arguments
