@@ -12,20 +12,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
 
+from train_model import WeatherClassifier, DEFAULT_DATASET_PATH # Important to first load this
 from src.utils.data_loader import WeatherDataset
-from src.training.train_model import WeatherClassifier
-from src.training.train_model import DEFAULT_DATASET_PATH
 
-# TO RUN IN CONSOLE:
-# 1. (WINDOWS): set PYTHONPATH=<path_to_project_root>
-# 2. (LINUX): export PYTHONPATH=<path_to_project_root>
-# 3. python models/optimize_hyperparameters.py --data_folder <path_to_dataset> --n_trials <number_of_trials>
-# --epochs <number_of_epochs> --device <device> --mode <mode> --study_name <study_name>
-
-# ! FOR OPTUNA:
-# 1. pip install optuna-dashboard
-# 2. cd .\models\
-# 3. optuna-dashboard --storage sqlite:///example.db
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
