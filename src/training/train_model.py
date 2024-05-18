@@ -28,12 +28,6 @@ sys.path.insert(0, PROJECT_ROOT)
 from src.utils.data_loader import WeatherDataset # Important to import WeatherDataset in this position
 
 
-# TODO: Add this information to README.md
-# ! TO RUN IN TERMINAL (WINDOWS): set PYTHONPATH=%PYTHONPATH%;<PATH_TO_PROJECT>
-# THEN RUN: python models/train_model.py --data_path <PATH_TO_DATASET> -- device <DEVICE> --epochs <EPOCHS> --model_path <MODEL_PATH>
-# ! TO RUN IN TERMINAL (LINUX/MACOS): export PYTHONPATH=$PYTHONPATH:<PATH_TO_PROJECT>
-# THEN RUN: python models/train_model.py --data_path <PATH_TO_DATASET> -- device <DEVICE> --epochs <EPOCHS> --model_path <MODEL_PATH>
-
 def arguments():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Weather classification')
