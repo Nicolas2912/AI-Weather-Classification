@@ -1,8 +1,10 @@
 import os
 import sys
 import random
+import time
 from collections import defaultdict
 from typing import Tuple, Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import torch
 from torch.utils.data import DataLoader, Dataset, random_split
@@ -20,6 +22,13 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 
 # Add the project root to the sys.path
 sys.path.insert(0, PROJECT_ROOT)
+
+from src.training.train_model import DEFAULT_DATASET_PATH
+
+if os.name == 'nt':
+    TEST_IMAGE_PATH = PROJECT_ROOT + "\\" + "test_images"
+else:
+    TEST_IMAGE_PATH = PROJECT_ROOT + "/" + "test_images"
 
 
 class WeatherDataset(Dataset):
@@ -100,7 +109,8 @@ class WeatherDataset(Dataset):
         return imgs_loader
 
 
-def analyze_class_distribution(data_loaders: dict, index_to_class: dict) -> Dict[str, Dict[str, int]]:
+def analyze_class_distribution(data_loaders: Dict[str, 'DataLoader'], index_to_class: Dict[int, str]) -> Dict[
+    str, Dict[str, int]]:
     """
     Analyzes the class distribution across training, validation, and test datasets.
 
@@ -113,13 +123,25 @@ def analyze_class_distribution(data_loaders: dict, index_to_class: dict) -> Dict
     """
     class_distribution = {'train': defaultdict(int), 'val': defaultdict(int), 'test': defaultdict(int)}
 
-    for phase in ['train', 'val', 'test']:
+    def process_phase(phase: str):
         loader = data_loaders[phase]
-        for images, labels in tqdm(loader, desc=f"Analyzing {phase} distribution"):
-            for label in labels:
-                class_name = index_to_class[label.item()]
-                class_distribution[phase][class_name] += 1
+        phase_distribution = defaultdict(int)
+        for images, labels in (loader):
+            unique, counts = np.unique(labels.numpy(), return_counts=True)
+            for label, count in zip(unique, counts):
+                class_name = index_to_class[label]
+                phase_distribution[class_name] += count
+        return phase, phase_distribution
 
+    # Using ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_phase, phase) for phase in ['train', 'val', 'test']]
+        for future in futures:
+            phase, phase_distribution = future.result()
+            class_distribution[phase] = phase_distribution
+
+    # Convert defaultdict to dict
+    class_distribution = {phase: dict(dist) for phase, dist in class_distribution.items()}
     return class_distribution
 
 
@@ -152,18 +174,10 @@ def plot_class_distributions(class_distribution: Dict[str, Dict[str, int]]):
 
 
 if __name__ == "__main__":
-    path_dataset = ("/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester"
-                    "/SimulationOptischerSysteme/AI-Weather-Classification/dataset")
-    one_image = ("/Users/nicolasschneider/MeineDokumente/FH_Bielefeld/Optimierung_und_Simulation/2. Semester"
-                 "/SimulationOptischerSysteme/AI-Weather-Classification/utils/one_image")
-
-    path_dataset_win = (r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation"
-                        r"\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\dataset")
-    one_image_win = (r"C:\Users\Anwender\Desktop\Nicolas\Dokumente\FH Bielefeld\Optimierung und Simulation"
-                     r"\2. Semester\SimulationOptischerSysteme\AI-Weather-Classification\test_image")
-
-    W = WeatherDataset(data_folder=path_dataset_win)
+    W = WeatherDataset(data_folder=DEFAULT_DATASET_PATH)
+    start_time = time.time()
     train_loader, val_loader, test_loader = W.get_data_loaders(batch_size=1, train_ratio=0.7, seed=42)
+    print(f"Execution time to get data loader: {round(time.time() - start_time, 3)}")
 
     print(f"Number of images in the dataset: {len(W)}")
     print(f"Number of images in the training set: {len(train_loader.dataset)}")
@@ -179,11 +193,14 @@ if __name__ == "__main__":
         'test': test_loader
     }
 
-    # distribution = analyze_class_distribution(loaders, idx_to_class)
-    # plot_class_distributions(distribution)
+    start_time = time.time()
+    distribution = analyze_class_distribution(loaders, idx_to_class)
+    print(f"Execution time of analyze class distribution: {round(time.time() - start_time, 4)} s")
+
+    plot_class_distributions(distribution)
 
     # Load a single image from the dataset
-    image_loader = W.custom_image_loader(one_image_win)
+    image_loader = W.custom_image_loader(TEST_IMAGE_PATH)
     image, _ = next(iter(image_loader))
     # Display the image and its label
     plt.imshow(image.squeeze().permute(1, 2, 0))
